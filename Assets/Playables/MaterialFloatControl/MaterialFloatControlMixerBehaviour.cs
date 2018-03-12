@@ -18,7 +18,7 @@ public class MaterialFloatControlMixerBehaviour : PlayableBehaviour
             return;
 
         int clipsCountOnCurrentTrack = playable.GetInputCount ();//how many clips on current track
-		Debug.Log(clipsCountOnCurrentTrack);
+		//Debug.Log(clipsCountOnCurrentTrack);
 
         float currentFrameValue = 0;
 		int nameHash = -1;

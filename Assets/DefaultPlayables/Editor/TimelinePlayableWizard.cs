@@ -432,8 +432,11 @@ public class TimelinePlayableWizard : EditorWindow
         PlayableBehaviourMixerAlreadyExists,
         TrackAssetAlreadyExists,
         PlayableDrawerAlreadyExists,
+        DirectoryNotExists,
     }
 
+    [SerializeField]
+    private static string playablesPath = "Assets/Playables"; 
 
     public bool showHelpBoxes = true;
     public string playableName = "";
@@ -462,6 +465,7 @@ public class TimelinePlayableWizard : EditorWindow
     CreationError m_CreationError;
     
     readonly GUIContent m_ShowHelpBoxesContent = new GUIContent("Show Help", "Do you want to see the help boxes as part of this wizard?");
+    readonly GUIContent m_PlayablesPathContent = new GUIContent("Playables Directory", "This is where the playable will be created");
     readonly GUIContent m_PlayableNameContent = new GUIContent("Playable Name", "This is the name that will represent the playable.  E.G. TransformTween.  It will be the basis for the class names so it is best not to use the postfixes: 'Clip', 'Behaviour', 'MixerBehaviour' or 'Drawer'.");
     readonly GUIContent m_StandardBlendPlayableContent = new GUIContent("Standard Blend Playable", "Often when creating a playable it's intended purpose is just to briefly override the properties of a component for the playable's duration and then blend back to the defaults.  For example a playable that changes the color of a Light but changes it back.  To make a playable with this functionality, check this box.");
     readonly GUIContent m_TrackBindingTypeContent = new GUIContent("Track Binding Type", "This is the type of object the Playable will affect.  E.G. To affect the position choose Transform.");
@@ -601,6 +605,12 @@ public class TimelinePlayableWizard : EditorWindow
             EditorGUILayout.HelpBox(m_PlayableNameContent.tooltip, MessageType.Info);
             EditorGUILayout.Space();
         }
+
+        string contentBuffer = EditorGUILayout.TextField(m_PlayablesPathContent, playablesPath);
+        if(!string.IsNullOrEmpty(contentBuffer) && Directory.Exists(contentBuffer)) {
+            playablesPath = contentBuffer;
+        }
+
         playableName = EditorGUILayout.TextField (m_PlayableNameContent, playableName);
 
         bool playableNameNotEmpty = !string.IsNullOrEmpty (playableName);
@@ -1062,6 +1072,14 @@ public class TimelinePlayableWizard : EditorWindow
 
     CreationError CreateScripts ()
     {
+        if(!Directory.Exists(playablesPath)) {
+            return CreationError.DirectoryNotExists;
+        }
+
+        if(playablesPath.Last() == '/' || playablesPath.Last() == '\\') {
+            playablesPath = playablesPath.Remove(playablesPath.Length - 1);
+        }
+
         if (ScriptAlreadyExists(playableName + k_TimelineClipAssetSuffix))
             return CreationError.PlayableAssetAlreadyExists;
 
@@ -1077,18 +1095,27 @@ public class TimelinePlayableWizard : EditorWindow
         if (m_CreateDrawer && ScriptAlreadyExists(playableName + k_PropertyDrawerSuffix))
             return CreationError.PlayableDrawerAlreadyExists;
 
-        AssetDatabase.CreateFolder ("Assets", playableName);
+        string currentPlayableDirectoryPath = playablesPath + "/" + playableName;
+        string directoryGUID = null;
+        if(!Directory.Exists(currentPlayableDirectoryPath)) {
+            directoryGUID = AssetDatabase.CreateFolder (playablesPath, playableName);
+            currentPlayableDirectoryPath = AssetDatabase.GUIDToAssetPath(directoryGUID);
+        }
+        else {
+            currentPlayableDirectoryPath = Path.GetFullPath(currentPlayableDirectoryPath);
+        }
 
         if (isStandardBlendPlayable)
         {
-            CreateScript (playableName + k_TimelineClipAssetSuffix, StandardBlendPlayableAsset());
-            CreateScript (playableName + k_TimelineClipBehaviourSuffix, StandardBlendPlayableBehaviour ());
-            CreateScript (playableName + k_PlayableBehaviourMixerSuffix, StandardBlendPlayableBehaviourMixer ());
-            CreateScript (playableName + k_TrackAssetSuffix, StandardBlendTrackAssetScript ());
+            CreateScript (currentPlayableDirectoryPath, playableName + k_TimelineClipAssetSuffix, StandardBlendPlayableAsset());
+            CreateScript (currentPlayableDirectoryPath, playableName + k_TimelineClipBehaviourSuffix, StandardBlendPlayableBehaviour ());
+            CreateScript (currentPlayableDirectoryPath, playableName + k_PlayableBehaviourMixerSuffix, StandardBlendPlayableBehaviourMixer ());
+            CreateScript (currentPlayableDirectoryPath, playableName + k_TrackAssetSuffix, StandardBlendTrackAssetScript ());
 
-            AssetDatabase.CreateFolder ("Assets/" + playableName, "Editor");
+            directoryGUID = AssetDatabase.CreateFolder (currentPlayableDirectoryPath, "Editor");
+            string playableEditorDirectoryPath = AssetDatabase.GUIDToAssetPath(directoryGUID);
 
-            string path = Application.dataPath + "/" + playableName + "/Editor/" + playableName + k_PropertyDrawerSuffix + ".cs";
+            string path = playableEditorDirectoryPath + "/" + playableName + k_PropertyDrawerSuffix + ".cs";
             using (StreamWriter writer = File.CreateText (path))
             {
                 writer.Write (StandardBlendPlayableDrawer ());
@@ -1096,16 +1123,17 @@ public class TimelinePlayableWizard : EditorWindow
         }
         else
         {
-            CreateScript(playableName + k_TimelineClipAssetSuffix, PlayableAsset());
-            CreateScript(playableName + k_TimelineClipBehaviourSuffix, PlayableBehaviour());
-            CreateScript(playableName + k_PlayableBehaviourMixerSuffix, PlayableBehaviourMixer());
-            CreateScript(playableName + k_TrackAssetSuffix, TrackAssetScript());
+            CreateScript(currentPlayableDirectoryPath, playableName + k_TimelineClipAssetSuffix, PlayableAsset());
+            CreateScript(currentPlayableDirectoryPath, playableName + k_TimelineClipBehaviourSuffix, PlayableBehaviour());
+            CreateScript(currentPlayableDirectoryPath, playableName + k_PlayableBehaviourMixerSuffix, PlayableBehaviourMixer());
+            CreateScript(currentPlayableDirectoryPath, playableName + k_TrackAssetSuffix, TrackAssetScript());
 
             if (m_CreateDrawer)
             {
-                AssetDatabase.CreateFolder("Assets/" + playableName, "Editor");
-
-                string path = Application.dataPath + "/" + playableName + "/Editor/" + playableName + k_PropertyDrawerSuffix + ".cs";
+                directoryGUID = AssetDatabase.CreateFolder (currentPlayableDirectoryPath, "Editor");
+                string playableEditorDirectoryPath = AssetDatabase.GUIDToAssetPath(directoryGUID);
+                
+                string path = playableEditorDirectoryPath + "/" + playableName + k_PropertyDrawerSuffix + ".cs";
                 using (StreamWriter writer = File.CreateText(path))
                 {
                     writer.Write(PlayableDrawer());
@@ -1137,9 +1165,9 @@ public class TimelinePlayableWizard : EditorWindow
         return false;
     }
 
-    void CreateScript (string fileName, string content)
+    void CreateScript (string directoryPath, string fileName, string content)
     {
-        string path = Application.dataPath + "/" + playableName + "/" + fileName + ".cs";
+        string path = directoryPath + "/" + fileName + ".cs";
         using (StreamWriter writer = File.CreateText (path))
             writer.Write (content);
     }
